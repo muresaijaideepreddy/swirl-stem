@@ -1,13 +1,16 @@
 import {products,findProduct} from '@/lib/catalog';
 import {assertSameOrigin,cleanIds,InputError,validateLead,validKey,verifySignature} from '@/lib/core.mjs';
-import {db,user,json,body,failure,settings,stripe,fulfill,requireAccess} from '@/lib/server';
+import {db,user,json,body,failure,settings,stripe,fulfill,requireAccess,schoolService} from '@/lib/server';
+import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
  const u=await user(),url=new URL(req.url),action=url.pathname.slice(5),database=db();
+ if(action==='schools')return json(await schoolService().view(u));
  if(action==='state'){
   const [cart,owned,orders,leads,progress]=await Promise.all([database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>(),database.prepare('SELECT product_id,mode FROM entitlements WHERE user_id = ?').bind(u.userId).all(),database.prepare('SELECT id,items,total,status,mode,created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 30').bind(u.userId).all(),database.prepare('SELECT id,data,created_at FROM leads WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').bind(u.userId).all(),database.prepare('SELECT product_id,completed FROM progress WHERE user_id = ?').bind(u.userId).all()]);
-  return json({user:{name:u.displayName,email:u.email},cart:cart?JSON.parse(cart.items):[],owned:owned.results,orders:orders.results,requests:leads.results,progress:progress.results,stripeReady:settings().STRIPE_SECRET_KEY?.startsWith('sk_test_')===true});
+  const schools=await schoolService().accessSchools(u.userId),schoolOwned=schools.some(s=>schoolAccess(s))?products.filter(p=>!owned.results.some(o=>o.product_id===p.id)).map(p=>({product_id:p.id,mode:'school-test'})):[];
+  return json({user:{name:u.displayName,email:u.email},cart:cart?JSON.parse(cart.items):[],owned:[...owned.results,...schoolOwned],orders:orders.results,requests:leads.results,progress:progress.results,stripeReady:settings().STRIPE_SECRET_KEY?.startsWith('sk_test_')===true});
  }
  if(action==='download'){
   const id=url.searchParams.get('id')??'',p=findProduct(id);await requireAccess(u.userId,id);if(!p)throw new InputError('Resource not found.',404);
@@ -31,12 +34,22 @@ export async function POST(req:Request){try{
  const action=new URL(req.url).pathname.slice(5),rawBody=await req.text();if(rawBody.length>250000)throw new InputError('Request too large.',413);
  if(action==='stripe-webhook'){
   const raw=rawBody;if(raw.length>250000)throw new InputError('Request too large.',413);if(!await verifySignature(raw,req.headers.get('stripe-signature'),settings().STRIPE_WEBHOOK_SECRET))throw new InputError('Invalid signature.',400);
-  let event:any;try{event=JSON.parse(raw)}catch{throw new InputError('Invalid event.');}if(event.livemode!==false)throw new InputError('Only Stripe test events are accepted.');
+  let event:any;try{event=JSON.parse(raw)}catch{throw new InputError('Invalid event.');}if(!event||typeof event.id!=='string'||!/^evt_[A-Za-z0-9]+$/.test(event.id)||typeof event.type!=='string'||!event.data?.object||event.livemode!==false)throw new InputError('Only valid Stripe test events are accepted.');
   if(await db().prepare('SELECT id FROM events WHERE id = ?').bind(event.id).first())return json({received:true});
-  if(['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type))await fulfill(event.data.object.id);
+  const schoolEvent=await schoolService().webhook(event);
+  if(!schoolEvent&&['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)){const order=await db().prepare('SELECT id FROM orders WHERE session_id=?').bind(event.data.object.id).first();if(order)await fulfill(event.data.object.id);}
   await db().prepare('INSERT INTO events(id,created_at) VALUES (?,?) ON CONFLICT(id) DO NOTHING').bind(event.id,Date.now()).run();return json({received:true});
  }
  assertSameOrigin(req);const u=await user(),b=await body(req,rawBody),database=db();
+ if(action==='school-create')return json(await schoolService().create(u,b.name));
+ if(action==='school-checkout')return json(await schoolService().checkout(u,b.schoolId,b.consent));
+ if(action==='school-confirm')return json(await schoolService().confirm(u,b.sessionId));
+ if(action==='school-portal')return json(await schoolService().portal(u,b.schoolId));
+ if(action==='school-refresh')return json(await schoolService().manualRefresh(u,b.schoolId));
+ if(action==='school-invite')return json(await schoolService().invite(u,b.schoolId));
+ if(action==='school-join')return json(await schoolService().accept(u,b.token));
+ if(action==='school-remove')return json(await schoolService().remove(u,b.schoolId,b.memberId));
+ if(action==='school-revoke')return json(await schoolService().revoke(u,b.schoolId,b.inviteId));
  if(action==='cart'){
   const id=String(b.id??'');if(!findProduct(id))throw new InputError('That item is no longer available.');if(!['add','remove'].includes(b.operation))throw new InputError('Invalid cart action.');
   if(b.operation==='add'){

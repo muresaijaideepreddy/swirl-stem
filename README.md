@@ -16,7 +16,7 @@ npm run dev
 The starter's development sign-in flow uses a local synthetic account. Production identity comes from the Sites dispatcher; do not expose the Worker directly while trusting arbitrary client-supplied `oai-authenticated-*` headers.
 
 ```sh
-node --test tests/core.test.mjs
+node --test tests/core.test.mjs tests/school-billing.test.mjs
 npx tsc --noEmit
 npm run build
 ```
@@ -27,7 +27,7 @@ Apply the generated migration to the local database once before API testing:
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_overrated_firedrake.sql
 ```
 
-Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs`. The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
+Apply `drizzle/0001_damp_mister_fear.sql` with the same local command after the initial migration. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` and `node tests/school-integration.mjs`. The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
 
 ## Configuration
 
@@ -45,3 +45,12 @@ Demo checkout is deliberately available in this private prototype. It grants onl
 - `db/schema.ts`, `drizzle/`: persistent schema and generated migration.
 
 Prices, curriculum, licensing proposals and sample PDFs are for demonstration. NASA/JPL content is attributed public sample material, not SwIRL-owned premium content and not an endorsement.
+
+## School subscriptions
+
+Open `/school` to create a director-managed physical location and adult facilitator invitations. The annual school plan is provisionally USD 399/year with unlimited facilitators. Subscription checkout, billing management and lifecycle handling are implemented for **Stripe test mode only**; connecting and exercising a real Stripe sandbox is still required. Read [BILLING_SETUP.md](BILLING_SETUP.md) for features, configuration, tests and production limitations.
+
+- `lib/school-billing.mjs`: plan, recurring Checkout, portal, lifecycle synchronization and tenant authorization.
+- `app/school.tsx`: school setup, billing and facilitator management.
+- `tests/school-billing.test.mjs`: service tests using real SQLite and a fake Stripe API. Requires a Node runtime with `node:sqlite` (Node 22.13+).
+- `tests/school-integration.mjs`: local Worker/D1 endpoint tests without Stripe credentials.
