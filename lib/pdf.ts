@@ -1,0 +1,7 @@
+// Plain-text prototype PDF writer. No untrusted value is interpreted as PDF syntax.
+export function makePdf(pages:string[][]):Uint8Array<ArrayBuffer>{
+ const ascii=(s:string)=>s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[–—]/g,'-').replace(/[^\x20-\x7e]/g,' ').replaceAll('\\','\\\\').replaceAll('(','\\(').replaceAll(')','\\)');
+ const objects:string[]=['<< /Type /Catalog /Pages 2 0 R >>','','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'],kids:number[]=[];
+ pages.forEach(lines=>{const pageId=objects.length+1,streamId=pageId+1;kids.push(pageId);objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${streamId} 0 R >>`);let stream='BT /F1 11 Tf 54 732 Td 19 TL\n';lines.forEach((line,i)=>{const parts=line.match(/.{1,78}(?:\s|$)|.{1,78}/g)??[''];parts.forEach(part=>{stream+=`${i===0?'/F1 19 Tf':'/F1 11 Tf'} (${ascii(part.trim())}) Tj T*\n`;});stream+='T*\n';});stream+='ET';objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);});
+ objects[1]=`<< /Type /Pages /Kids [${kids.map(x=>x+' 0 R').join(' ')}] /Count ${kids.length} >>`;let pdf='%PDF-1.4\n';const offsets=[0];objects.forEach((o,i)=>{offsets.push(pdf.length);pdf+=`${i+1} 0 obj\n${o}\nendobj\n`;});const xref=pdf.length;pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;offsets.slice(1).forEach(n=>pdf+=`${String(n).padStart(10,'0')} 00000 n \n`);pdf+=`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;return new TextEncoder().encode(pdf);
+}

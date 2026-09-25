@@ -1,0 +1,1 @@
+export default function NotFound(){return <main className="wrap page"><div className="eyebrow">404 · A NEW DIRECTION</div><h1>Let’s find your next discovery.</h1><p>This page or curriculum item isn’t available.</p><a className="button primary" href="/curriculum">Explore curriculum</a></main>}
