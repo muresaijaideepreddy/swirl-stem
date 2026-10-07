@@ -52,6 +52,8 @@ The final rejection-to-upload sequence verifies recovery after invalid, foreign-
 
 The local browser created a new lesson, rejected a blank required form, saved/reopened it, uploaded a PDF, published it, found it in the catalog, completed sample checkout, opened the classroom and saved completion. English/Spanish selection and combined download were checked. The combined download contained the uploaded worksheet and generated lesson notes/materials. Rendered pages had no clipped or overlapping text. The checked 320 px and 1024 px classroom viewports had no horizontal overflow; browser error logs were empty at inspection.
 
+After publication, the private deployed studio loaded the owner administrator controls with no captured browser errors. The live D1 schema contains all 21 expected tables.
+
 These are bounded, executed checks, not a claim that every possible edge case or device has been tested. The previous storefront and school browser checks remain documented in Git history.
 
 ## External setup and acceptance still required

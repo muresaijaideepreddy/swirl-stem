@@ -27,7 +27,7 @@ Apply the generated migration to the local database once before API testing:
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_overrated_firedrake.sql
 ```
 
-Apply `drizzle/0001_damp_mister_fear.sql` and then `drizzle/0002_past_azazel.sql` with the same local command. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` , `node tests/school-integration.mjs` and `node tests/feature-integration.mjs`. Feature tests require a local synthetic `local_seedy` administrator in `content_roles` (never create this identity in production). The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
+Apply `drizzle/0001_damp_mister_fear.sql` and then `drizzle/0002_past_azazel.sql` with the same local command. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` , `node tests/school-integration.mjs` and `node tests/feature-integration.mjs`. Feature tests require a local synthetic `local_seedy` administrator in `content_users` (never create this identity in production). The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
 
 ## Configuration
 
