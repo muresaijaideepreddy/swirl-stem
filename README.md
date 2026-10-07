@@ -16,7 +16,7 @@ npm run dev
 The starter's development sign-in flow uses a local synthetic account. Production identity comes from the Sites dispatcher; do not expose the Worker directly while trusting arbitrary client-supplied `oai-authenticated-*` headers.
 
 ```sh
-node --test tests/core.test.mjs tests/school-billing.test.mjs
+node --test tests/core.test.mjs tests/school-billing.test.mjs tests/content.test.mjs tests/program-billing.test.mjs
 npx tsc --noEmit
 npm run build
 ```
@@ -27,7 +27,7 @@ Apply the generated migration to the local database once before API testing:
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_overrated_firedrake.sql
 ```
 
-Apply `drizzle/0001_damp_mister_fear.sql` with the same local command after the initial migration. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` and `node tests/school-integration.mjs`. The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
+Apply `drizzle/0001_damp_mister_fear.sql` and then `drizzle/0002_past_azazel.sql` with the same local command. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` , `node tests/school-integration.mjs` and `node tests/feature-integration.mjs`. Feature tests require a local synthetic `local_seedy` administrator in `content_roles` (never create this identity in production). The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
 
 ## Configuration
 
@@ -54,3 +54,14 @@ Open `/school` to create a director-managed physical location and adult facilita
 - `app/school.tsx`: school setup, billing and facilitator management.
 - `tests/school-billing.test.mjs`: service tests using real SQLite and a fake Stripe API. Requires a Node runtime with `node:sqlite` (Node 22.13+).
 - `tests/school-integration.mjs`: local Worker/D1 endpoint tests without Stripe credentials.
+
+## Authoring and program operations
+
+- `/studio`: the configured owner approves creators, publishes curriculum, reviews inquiries and PO requests, and manages approved public branding. Creators save lessons and upload their own teaching files.
+- `/program`: seasonal passes, multi-site quotes, PO submission, certificate upload and invoices. `/school` switches locations and manages invitations and annual subscriptions.
+- `/marketing` and `/sample`: configurable promotion templates and public lead-gated samples.
+- `lib/content.mjs`, `lib/feature-routes.ts`, `lib/files.mjs`: revision-safe content, route authorization and private R2 PDF/file delivery.
+- `lib/media.ts`: signed Mux playback and direct upload. Configure `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_SIGNING_KEY_ID` and `MUX_SIGNING_PRIVATE_KEY` through hosted secrets.
+- `lib/program-billing.mjs`, `lib/email.mjs`: seasonal licenses, PO approvals/invoices and a durable notification outbox. Optional email requires `RESEND_API_KEY` and verified `EMAIL_FROM`.
+
+Bootstrap the actual owner with secret `CONTENT_ADMIN_EMAILS` or stable `CONTENT_ADMIN_USER_IDS`, verified against the hosting platform identity. The current owner allowlist is configured in hosted secrets, not this public source. `STRIPE_TAX_ENABLED` defaults false; enabling it requires the Stripe account's actual tax setup and full billing address. See the current feature-by-feature matrix and exact acceptance gaps in [QA_REPORT.md](QA_REPORT.md).

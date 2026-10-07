@@ -4,12 +4,12 @@ The specification requests an annual subscription per physical location with unl
 
 ## Available flows
 
-- `/school`: director creates one school/location per account; owns its billing and facilitator roster.
+- `/school`: director creates and switches between separate school/locations per account; owns its billing and facilitator roster.
 - Director starts a Stripe-hosted recurring card Checkout after explicit annual-renewal consent.
 - Checkout uses server-owned pricing, fixed quantity, a durable attempt, a per-school transactional lease, and Stripe idempotency. Double clicks cannot create a second active subscription.
 - Directors open a Stripe-hosted portal for invoices, payment-method updates and cancellation at period end. Plan/quantity changes are disabled. Portal configuration is created in the connected test account by the app.
 - Subscription state is reconciled from Stripe, never trusted from the return URL or webhook payload alone. Paid invoice amount, currency, customer, subscription, price and billing period are checked. Cancellation, failed payment, expiry and recovery affect school access without creating permanent resource entitlements.
-- A school subscription covers the current sample catalog. It cannot unlock absent premium video content. Individual sample entitlements remain independent when school access ends.
+- A verified paid test school subscription covers the published catalog, including uploaded premium courses. Absent premium assets remain unavailable. Individual sample entitlements remain independent when school access ends.
 - Directors create single-use, seven-day facilitator join links, revoke unused links and remove members. Only a token hash is stored. Links are displayed once; no invitation emails are sent. Account sign-in plus a school membership is required. The site’s existing private audience is preserved, so a facilitator also needs permission to open the private website.
 
 ## Connect a sandbox securely
@@ -37,7 +37,13 @@ Automated tests use actual SQLite and a fake Stripe transport to cover these ser
 
 ## Deliberate limits before production
 
-The initial test plan accepts only the exact USD 399 annual charge with one item, no coupons, credits, tax or proration. Such invoice variations fail closed. Live-mode enablement requires reviewed plan/pricing and access policies, Stripe Tax and receipts setup where needed, refunds/disputes and reconciliation, monitored webhook delivery, approved curriculum, and private premium assets. Seasonal and multi-site billing, director transfer, email delivery, and tax-exempt PO approval remain outside this annual school flow. An ambiguous Checkout older than 23 hours is blocked for support reconciliation rather than risking a duplicate charge. Retention/deletion and production legal terms still need approval.
+The base plan remains exactly USD 399 per year, one item, without coupons, credits or proration. Optional Stripe automatic tax is supported when `STRIPE_TAX_ENABLED=true`; the app checks the unchanged base price and verified paid tax-inclusive amount. Configure tax registrations in the actual Stripe account before enabling it.
+
+`/program` also implements a provisional USD 149 seasonal pass for 90 days, scoped to a selected theme or module and physical location. The start date, access expiry and price are stored before Checkout. Overlapping pending checkouts are reused. Recurring annual billing and PO approval share the school lock to prevent conflicting attempts.
+
+PO requests include an owned location, PO number, Net30 request, billing address and optional private tax-exemption PDF. Only an administrator may approve the exemption and invoice. Invoice items attach to a specific test invoice; only verified paid invoices create an annual fixed-term license. Multi-site quotes are durable PDFs; custom enterprise commercial approval remains manual.
+
+Production rollout still requires real Stripe sandbox acceptance, approved prices and tax/receipt configuration, refund/dispute policies, monitored webhook delivery and reconciliation, approved content and legal terms. Live keys are refused. Ambiguous Checkout attempts beyond the provider idempotency window are blocked for review rather than creating a second charge. Email delivery needs a configured verified sender; acknowledgments are queued while disconnected. See [QA_REPORT.md](QA_REPORT.md) for the current implementation and test matrix.
 
 ## References
 

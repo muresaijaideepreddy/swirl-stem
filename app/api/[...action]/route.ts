@@ -1,21 +1,25 @@
-import {products,findProduct} from '@/lib/catalog';
+import {catalog,content,premiumAccess,product} from '@/lib/content-server';
+import {featureGet,featurePost,program} from '@/lib/feature-routes';
+import {csvCell} from '@/lib/files.mjs';
 import {assertSameOrigin,cleanIds,InputError,validateLead,validKey,verifySignature} from '@/lib/core.mjs';
 import {db,user,json,body,failure,settings,stripe,fulfill,requireAccess,schoolService} from '@/lib/server';
 import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
+ const feature=await featureGet(req);if(feature)return feature;const products=await catalog(),findProduct=(id:string)=>products.find(p=>p.id===id);
  const u=await user(),url=new URL(req.url),action=url.pathname.slice(5),database=db();
  if(action==='schools')return json(await schoolService().view(u));
  if(action==='state'){
   const [cart,owned,orders,leads,progress]=await Promise.all([database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>(),database.prepare('SELECT product_id,mode FROM entitlements WHERE user_id = ?').bind(u.userId).all(),database.prepare('SELECT id,items,total,status,mode,created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 30').bind(u.userId).all(),database.prepare('SELECT id,data,created_at FROM leads WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').bind(u.userId).all(),database.prepare('SELECT product_id,completed FROM progress WHERE user_id = ?').bind(u.userId).all()]);
   const schools=await schoolService().accessSchools(u.userId),schoolOwned=schools.some(s=>schoolAccess(s))?products.filter(p=>!owned.results.some(o=>o.product_id===p.id)).map(p=>({product_id:p.id,mode:'school-test'})):[];
-  return json({user:{name:u.displayName,email:u.email},cart:cart?JSON.parse(cart.items):[],owned:[...owned.results,...schoolOwned],orders:orders.results,requests:leads.results,progress:progress.results,stripeReady:settings().STRIPE_SECRET_KEY?.startsWith('sk_test_')===true});
+  const passes=(await database.prepare("SELECT l.scope FROM licenses l JOIN school_members m ON m.school_id=l.school_id WHERE m.user_id=? AND l.status='paid' AND l.starts_at<=? AND l.ends_at>?").bind(u.userId,Date.now(),Date.now()).all<any>()).results;const passOwned=products.filter(p=>passes.some(l=>l.scope==='all'||l.scope===p.id||l.scope==='subject:'+p.subject)).map(p=>({product_id:p.id,mode:'school-license-test'}));
+  return json({user:{name:u.displayName,email:u.email},libraryProducts:(await catalog(true)).filter(p=>owned.results.some(o=>o.product_id===p.id)||schools.some(s=>schoolAccess(s))||passes.some(l=>l.scope==='all'||l.scope===p.id||l.scope==='subject:'+p.subject)),role:await content().role(u),cart:cart?JSON.parse(cart.items):[],owned:[...owned.results,...schoolOwned,...passOwned],orders:orders.results,requests:leads.results,progress:progress.results,stripeReady:settings().STRIPE_SECRET_KEY?.startsWith('sk_test_')===true});
  }
  if(action==='download'){
-  const id=url.searchParams.get('id')??'',p=findProduct(id);await requireAccess(u.userId,id);if(!p)throw new InputError('Resource not found.',404);
+  const id=url.searchParams.get('id')??'',p=await product(id,true);await requireAccess(u.userId,id);if(!p)throw new InputError('Resource not found.',404);
   const kind=url.searchParams.get('kind')??'bundle',language=url.searchParams.get('lang')??'en';if(!['bundle','supplies'].includes(kind)||!['en','es'].includes(language))throw new InputError('Choose a valid download.');
-  if(kind==='supplies'){const rows=['Item,Quantity note',...p.materials.map(x=>'"'+x.replaceAll('"','""')+'","Adjust for group size"')].join('\r\n');return new Response(rows,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${id}-supplies.csv"`,'Cache-Control':'private, no-store'}});}
+  if(kind==='supplies'){const rows=['Item,Quantity note',...p.materials.map(x=>csvCell(x)+',"Adjust for group size"')].join('\r\n');return new Response(rows,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${id}-supplies.csv"`,'Cache-Control':'private, no-store'}});}
   const pages=language==='es'?[['Cuaderno de muestra',p.title,'Contenido de demostracion para revision por un educador.','Pregunta: Que crees que va a pasar?','Prediccion: _____________________________________','Observacion: ____________________________________','Dibuja o escribe lo que has descubierto.','Que cambiarias la proxima vez?'],['Notas para el adulto','Supervise siempre la actividad.','Adapte los materiales y las instrucciones a la edad.','La traduccion completa del curso aun no esta disponible.']]:[
   ['SwIRL sample teaching bundle',p.title,'DEMONSTRATION CONTENT - educator review required',`Suggested ages: ${p.ages} | Activity time: ${p.minutes} minutes`,'Digital resources only. Source all materials separately.','Lesson plan, observation worksheet and materials list.'],
   ['Facilitator lesson plan','Learning goal: Ask a question, build or observe, and explain findings.','1. Introduce the question and gather predictions.','2. Review materials and demonstrate safe handling.','3. Guide learners through a small build or observation.','4. Test one change at a time and record the results.','5. Invite learners to explain what they would try next.','Adult supervision required. Review allergies and small-part hazards.','Adults handle sharp tools, batteries and electrical connections.','Review all placeholder activities before using with children.'],
@@ -31,12 +35,13 @@ export async function GET(req:Request){try{
  throw new InputError('Not found.',404);
  }catch(e){return failure(e)}}
 export async function POST(req:Request){try{
+ const feature=await featurePost(req);if(feature)return feature;const products=await catalog(),findProduct=(id:string)=>products.find(p=>p.id===id);
  const action=new URL(req.url).pathname.slice(5),rawBody=await req.text();if(rawBody.length>250000)throw new InputError('Request too large.',413);
  if(action==='stripe-webhook'){
   const raw=rawBody;if(raw.length>250000)throw new InputError('Request too large.',413);if(!await verifySignature(raw,req.headers.get('stripe-signature'),settings().STRIPE_WEBHOOK_SECRET))throw new InputError('Invalid signature.',400);
   let event:any;try{event=JSON.parse(raw)}catch{throw new InputError('Invalid event.');}if(!event||typeof event.id!=='string'||!/^evt_[A-Za-z0-9]+$/.test(event.id)||typeof event.type!=='string'||!event.data?.object||event.livemode!==false)throw new InputError('Only valid Stripe test events are accepted.');
   if(await db().prepare('SELECT id FROM events WHERE id = ?').bind(event.id).first())return json({received:true});
-  const schoolEvent=await schoolService().webhook(event);
+  const programEvent=await program().webhook(event),schoolEvent=programEvent||await schoolService().webhook(event);
   if(!schoolEvent&&['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)){const order=await db().prepare('SELECT id FROM orders WHERE session_id=?').bind(event.data.object.id).first();if(order)await fulfill(event.data.object.id);}
   await db().prepare('INSERT INTO events(id,created_at) VALUES (?,?) ON CONFLICT(id) DO NOTHING').bind(event.id,Date.now()).run();return json({received:true});
  }
@@ -70,6 +75,7 @@ export async function POST(req:Request){try{
   const owned=await database.prepare('SELECT product_id FROM entitlements WHERE user_id = ?').bind(u.userId).all<any>();ids=ids.filter(id=>!owned.results.some(r=>r.product_id===id));if(!ids.length)throw new InputError('Your cart is empty or these resources are already in your classroom.');
   const total=ids.reduce((sum,id)=>sum+findProduct(id)!.price,0),now=Date.now();
   if(mode==='demo'){
+   if(ids.some(id=>findProduct(id)?.custom&&!findProduct(id)?.sample))throw new InputError('Premium curriculum requires a paid test license. Remove premium items to use demo checkout.',403);
    await database.batch([database.prepare("INSERT INTO orders(id,user_id,items,total,status,mode,created_at) VALUES (?,?,?,?,'complete','demo',?) ON CONFLICT(id) DO NOTHING").bind(orderId,u.userId,JSON.stringify(ids),total,now),database.prepare("INSERT INTO entitlements(user_id,product_id,order_id,mode,created_at) SELECT o.user_id, j.value, o.id, 'demo', o.created_at FROM orders o, json_each(o.items) j WHERE o.id = ? AND o.user_id = ? AND o.mode = 'demo' AND o.status = 'complete' ON CONFLICT(user_id,product_id) DO NOTHING").bind(orderId,u.userId),database.prepare("UPDATE carts SET items = (SELECT coalesce(json_group_array(value),'[]') FROM json_each(carts.items) WHERE value NOT IN (SELECT product_id FROM entitlements WHERE user_id = ?)), updated_at = ? WHERE user_id = ?").bind(u.userId,now,u.userId)]);return json({status:'complete'});
   }
   const origin=settings().SITE_ORIGIN;if(!origin||!origin.startsWith('https://')||new URL(origin).origin!==origin)throw new InputError('Stripe return URL has not been configured.',503);
@@ -87,7 +93,7 @@ export async function POST(req:Request){try{
   await database.prepare('INSERT INTO leads(id,user_id,data,created_at) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,u.userId,JSON.stringify(lead),now).run();return json({id,status:'saved',message:'Your prototype request is saved in your account. No email was sent and no license or invoice has been issued.'});
  }
  if(action==='progress'){
-  const p=findProduct(b.id);if(!p)throw new InputError('Lesson not found.',404);await requireAccess(u.userId,p.id);if(!Number.isInteger(b.lesson)||b.lesson<0||b.lesson>=p.lessons.length||typeof b.complete!=='boolean')throw new InputError('Invalid lesson progress.');
+  const p=await product(b.id,true);if(!p)throw new InputError('Lesson not found.',404);await requireAccess(u.userId,p.id);if(!Number.isInteger(b.lesson)||b.lesson<0||b.lesson>=p.lessons.length||typeof b.complete!=='boolean')throw new InputError('Invalid lesson progress.');
   if(b.complete)await database.prepare("INSERT INTO progress(user_id,product_id,completed) VALUES (?,?,json_array(?)) ON CONFLICT(user_id,product_id) DO UPDATE SET completed = CASE WHEN EXISTS(SELECT 1 FROM json_each(progress.completed) WHERE value = ?) THEN progress.completed ELSE json_insert(progress.completed,'$[#]',?) END").bind(u.userId,p.id,b.lesson,b.lesson,b.lesson).run();
   else await database.prepare("UPDATE progress SET completed = (SELECT coalesce(json_group_array(value),'[]') FROM json_each(progress.completed) WHERE value != ?) WHERE user_id = ? AND product_id = ?").bind(b.lesson,u.userId,p.id).run();return json({saved:true});
  }
