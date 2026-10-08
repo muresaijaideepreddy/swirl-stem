@@ -1,3 +1,4 @@
+import {linkYoutube} from './youtube.mjs';
 import {storedVideo,videoStream,validateIntroduction} from './video-server';
 import {sampleSource} from './catalog';
 import {db,settings,user,json,body,stripe} from './server';
@@ -58,6 +59,7 @@ export async function featurePost(req:Request):Promise<Response|null>{const url=
  if(action==='cms/save')return json(await content().save(u,b.id,b.revision,b.data));
  if(action==='cms/status')return json(await content().transition(u,b.id,b.revision,b.action));
  if(action==='cms/remove-asset'||action==='cms/video-cancel')return json(await removeVideo(u,b.id));
+ if(action==='cms/youtube-link')return json(await linkYoutube({db:db(),content:content()},u,b));
  if(action==='cms/video-start')return json(await startVideo(u,b));
  if(action==='cms/video-sync')return json(await syncVideo(u,b.id));
  if(action==='cms/play')return json(await playback(u,b.id,b.assetId,b.preview===true));

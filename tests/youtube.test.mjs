@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {youtubeId,youtubePlayback,linkYoutube} from '../lib/youtube.mjs';
+import {harness,admin,creator,draft} from './feature-fixture.mjs';
+const id='M7lc1UVf-VE';
+test('YouTube links normalize supported forms and discard playlist/tracking parameters',()=>{
+ for(const url of [`https://www.youtube.com/watch?v=${id}&list=ignore&t=20`,`https://youtu.be/${id}?si=ignore`,`https://m.youtube.com/watch?v=${id}`,`https://youtube.com/shorts/${id}`,`https://youtube.com/live/${id}`,`https://www.youtube-nocookie.com/embed/${id}`])assert.equal(youtubeId(url),id);
+ assert.equal(youtubePlayback(id).url,`https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0`);
+});
+test('Reject non-YouTube URLs, executable content, credentials, malformed IDs and playlists',()=>{
+ for(const url of [null,{},'x'.repeat(2049),'javascript:alert(1)','//youtube.com/watch?v='+id,`http://youtu.be/${id}`,`https://youtube.com.evil.test/watch?v=${id}`,`https://youtube.com@evil.test/watch?v=${id}`,`https://name@youtube.com/watch?v=${id}`,`https://youtube.com:8443/watch?v=${id}`,`https://youtu.be/${id}/extra`,'https://youtube.com/playlist?list=x','https://youtube.com/watch?v=short',`https://youtube.com/watch?v=${id}&v=abcdefghijk`,'<iframe src="https://youtube.com">'])assert.throws(()=>youtubeId(url));
+ assert.throws(()=>youtubePlayback('bad/id'));
+});
+async function setup(){const h=harness();await h.setupCreator();let c=await h.content.create(creator,crypto.randomUUID());c=await h.content.save(creator,c.id,c.revision,draft());return {...h,c,b:{key:crypto.randomUUID(),courseId:c.id,kind:'video',language:'en',lesson:0,url:'https://youtu.be/'+id}};}
+test('Links deduplicate, remain provider-distinct, and can restore after draft removal',async()=>{const h=await setup(),a=await linkYoutube(h,creator,h.b);assert.equal((await linkYoutube(h,creator,h.b)).id,a.id);assert.equal(h.sql.prepare('SELECT count(*) n FROM content_assets').get().n,1);const row=h.sql.prepare('SELECT * FROM content_assets').get();assert.equal(row.mime,'video/youtube');assert.equal(row.playback_id,id);assert.equal(row.provider_id,null);assert.equal(row.storage_key,null);await h.content.remove(creator,a.id);await linkYoutube(h,creator,h.b);assert.equal(h.sql.prepare('SELECT status FROM content_assets').get().status,'ready');});
+test('Owner authorization and video lesson metadata enforced',async()=>{const h=await setup();await assert.rejects(linkYoutube(h,{userId:'reader'},h.b),/creator access/);for(const change of [{kind:'plan'},{language:'xx'},{lesson:-1},{lesson:2}])await assert.rejects(linkYoutube(h,creator,{...h.b,...change}));});
+test('Published link stays protected while a replacement awaits publication',async()=>{const h=await setup(),a=await linkYoutube(h,creator,h.b);let c=await h.content.detail(creator,h.c.id);c=await h.content.transition(admin,c.id,c.revision,'publish');await assert.rejects(h.content.remove(creator,a.id),/published revision/);h.advance(10);const b=await linkYoutube(h,creator,{...h.b,url:'https://youtu.be/abcdefghijk'});c=await h.content.detail(creator,c.id);assert.deepEqual(JSON.parse(c.published_assets),[a.id]);c=await h.content.transition(admin,c.id,c.revision,'publish');assert.deepEqual(JSON.parse(c.published_assets),[b.id]);await h.content.remove(creator,a.id);});
+
+test('Deliberate re-addition can restore an older video while request retries deduplicate',async()=>{const h=await setup();await linkYoutube(h,creator,h.b);h.advance(10);await linkYoutube(h,creator,{...h.b,key:crypto.randomUUID(),url:'https://youtu.be/abcdefghijk'});h.advance(10);const restore={...h.b,key:crypto.randomUUID()},a=await linkYoutube(h,creator,restore);assert.equal((await linkYoutube(h,creator,restore)).id,a.id);let c=await h.content.detail(creator,h.c.id);c=await h.content.transition(admin,c.id,c.revision,'publish');assert.deepEqual(JSON.parse(c.published_assets),[a.id]);});

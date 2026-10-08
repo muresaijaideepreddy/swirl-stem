@@ -71,6 +71,11 @@ The Studio administrator sees configuration and connection diagnostics under **P
 
 ## Video authoring and QA
 
+For easy setup, choose a video purpose in Studio, select **YouTube link — easy setup**, and paste the URL of a video uploaded to YouTube as **Unlisted** with embedding allowed. Add the link, watch its preview and publish the reviewed curriculum. The site stores only its YouTube ID; no media file is copied. Lesson permissions still apply, but anyone who obtains an unlisted YouTube URL can watch or reshare it. This is an interim convenience option, not private video hosting. YouTube visibility, captions and embedding permissions are managed in YouTube Studio. The player includes a direct link if embedding is unavailable. The app validates link syntax, not video availability or privacy. Use **Private MP4 upload** when you need the existing access-controlled cloud storage.
+
+YouTube regression checks: `node --test tests/youtube.test.mjs` and, against the local Worker, `node tests/youtube-integration.mjs`.
+
+
 Save the lesson, select Student video, Prep video or Public preview video, and choose an H.264 MP4 with AAC audio. Export with Fast Start / Web Optimized enabled. Files may be up to 2 GiB, with durations up to two hours and metadata in the first 8 MiB. The studio uploads 8 MiB chunks. Pause finishes the current chunk; selecting the same file after an interrupted connection resumes saved chunks for six days. Cancel discards the upload. Watch the automatic private preview, then publish the reviewed revision. Existing published files cannot be removed until replaced by a new published revision. MP4 streaming supports seeking and checks access on each request; it does not prevent screen recording or replace adaptive transcoding.
 
 `node tests/storage-video-integration.mjs` requires two synthetic files in ignored `work/qa/`: `qa-upload.mp4` (small) and `qa-multipart.mp4` (larger than 16 MiB). Generate them with an installed FFmpeg, for example:
