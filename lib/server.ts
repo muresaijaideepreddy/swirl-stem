@@ -1,4 +1,5 @@
 import {individualBilling} from './individual-billing.mjs';
+import {refundHandling} from './refunds.mjs';
 import {env} from 'cloudflare:workers';
 import {headers} from 'next/headers';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
@@ -18,4 +19,5 @@ export function failure(e:unknown){if(e instanceof InputError)return json({error
 export async function stripe(path:string,form?:URLSearchParams,key?:string){const secret=settings().STRIPE_SECRET_KEY;assertTestKey(secret);const response=await fetch('https://api.stripe.com/v1/'+path,{method:form?'POST':'GET',headers:{Authorization:'Bearer '+secret,'Stripe-Version':'2025-03-31.basil',...(form?{'Content-Type':'application/x-www-form-urlencoded'}:{}),...(key?{'Idempotency-Key':key}:{})},body:form?.toString(),signal:AbortSignal.timeout(15000)});if(!response.ok)throw new InputError('Stripe test billing is unavailable. Please retry before starting another payment.',502);return response.json() as Promise<any>;}
 export function schoolService(){return schoolBilling({db:db(),stripe,settings:settings()})}
 export function individualService(){return individualBilling({db:db(),stripe,settings:settings(),catalog})}
+export function refundService(){return refundHandling({db:db(),stripe})}
 export async function requireAccess(userId:string,id:string){const p=await product(id,true);if(!p)throw new InputError('Curriculum not found.',404);if(await premiumAccess(userId,id))return {mode:'school-or-purchase-test'};const entitlement=await db().prepare('SELECT * FROM entitlements WHERE user_id = ? AND product_id = ?').bind(userId,id).first<any>();if(entitlement&&(!p.custom||p.sample))return entitlement;if(p.custom&&p.sample)return {mode:'sample'};throw new InputError('Add this resource to your classroom or ask your director to check the school subscription.',403);}

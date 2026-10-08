@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
-import {schoolBilling,schoolAccess,paidThrough,validateSubscription,SCHOOL_PLAN} from '../lib/school-billing.mjs';
+import {schoolBilling,schoolAccess,paidThrough,validateSubscription,SCHOOL_PLAN,siteOrigin} from '../lib/school-billing.mjs';
+test('Billing return address needs https except localhost in local test mode',()=>{assert.equal(siteOrigin({SITE_ORIGIN:'https://swirl.example'}),'https://swirl.example');assert.throws(()=>siteOrigin({SITE_ORIGIN:'http://localhost:8787'}),e=>e.status===503);assert.equal(siteOrigin({SITE_ORIGIN:'http://localhost:8787',LOCAL_TEST_AUTH:'true'}),'http://localhost:8787');assert.throws(()=>siteOrigin({SITE_ORIGIN:'http://swirl.example',LOCAL_TEST_AUTH:'true'}),e=>e.status===503);assert.throws(()=>siteOrigin({SITE_ORIGIN:'https://swirl.example/path'}),e=>e.status===503);});
 
 const director={userId:'director',displayName:'School Director',email:'director@example.test'},teacher={userId:'teacher',displayName:'Teacher',email:'teacher@example.test'},other={userId:'other',displayName:'Other',email:'other@example.test'};
 function harness(){

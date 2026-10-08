@@ -4,7 +4,7 @@ import {csvCell,documentPdf} from '@/lib/files.mjs';
 import {courseSections,type CourseDocument} from '@/lib/course-pdf';
 import {amazonSearch} from '@/lib/catalog';
 import {assertSameOrigin,cleanIds,InputError,validateLead,validKey,verifySignature} from '@/lib/core.mjs';
-import {db,user,json,body,failure,settings,stripe,individualService,requireAccess,schoolService} from '@/lib/server';
+import {db,user,json,body,failure,settings,stripe,individualService,refundService,requireAccess,schoolService} from '@/lib/server';
 import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
 import {SCHOOL_ANNUAL_PRICE} from '@/lib/pricing.mjs';
@@ -42,7 +42,7 @@ export async function POST(req:Request){try{
   const raw=rawBody;if(raw.length>250000)throw new InputError('Request too large.',413);if(!await verifySignature(raw,req.headers.get('stripe-signature'),settings().STRIPE_WEBHOOK_SECRET))throw new InputError('Invalid signature.',400);
   let event:any;try{event=JSON.parse(raw)}catch{throw new InputError('Invalid event.');}if(!event||typeof event.id!=='string'||!/^evt_[A-Za-z0-9]+$/.test(event.id)||typeof event.type!=='string'||!event.data?.object||event.livemode!==false)throw new InputError('Only valid Stripe test events are accepted.');
   if(await db().prepare('SELECT id FROM events WHERE id = ?').bind(event.id).first())return json({received:true});
-  const programEvent=await program().webhook(event),schoolEvent=programEvent||await schoolService().webhook(event);
+  const refundEvent=await refundService().webhook(event),programEvent=refundEvent||await program().webhook(event),schoolEvent=programEvent||await schoolService().webhook(event);
   if(!schoolEvent)await individualService().webhook(event);
   await db().prepare('INSERT INTO events(id,created_at) VALUES (?,?) ON CONFLICT(id) DO NOTHING').bind(event.id,Date.now()).run();return json({received:true});
  }
