@@ -85,5 +85,8 @@ test('Sign-in refuses to start without credentials or an https site origin',asyn
  await assert.rejects(harness({settings:{GOOGLE_CLIENT_ID:'not-a-google-client'}}).service.start('/'),e=>e.status===503);
  await assert.rejects(harness({settings:{SITE_ORIGIN:'http://swirl.example'}}).service.start('/'),e=>e.status===503);
  await assert.rejects(harness({settings:{SITE_ORIGIN:'https://swirl.example/path'}}).service.start('/'),e=>e.status===503);
+ await assert.rejects(harness({settings:{SITE_ORIGIN:'http://localhost:8787'}}).service.start('/'),e=>e.status===503,'http only in local test mode');
+ const local=new URL((await harness({settings:{SITE_ORIGIN:'http://localhost:8787',LOCAL_TEST_AUTH:'true'}}).service.start('/')).location);assert.equal(local.searchParams.get('redirect_uri'),'http://localhost:8787/api/auth/callback');
+ await assert.rejects(harness({settings:{SITE_ORIGIN:'http://evil.example',LOCAL_TEST_AUTH:'true'}}).service.start('/'),e=>e.status===503);
  assert.equal(harness().service.configured(),true);assert.equal(harness({settings:{GOOGLE_CLIENT_SECRET:''}}).service.configured(),false);
 });
