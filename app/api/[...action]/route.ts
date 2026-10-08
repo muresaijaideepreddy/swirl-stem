@@ -7,6 +7,7 @@ import {assertSameOrigin,cleanIds,InputError,validateLead,validKey,verifySignatu
 import {db,user,json,body,failure,settings,stripe,individualService,requireAccess,schoolService} from '@/lib/server';
 import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
+import {SCHOOL_ANNUAL_PRICE} from '@/lib/pricing.mjs';
 import {authRoute} from '@/lib/auth-routes';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
@@ -29,7 +30,7 @@ export async function GET(req:Request){try{
  }
  if(action==='quote'){
   const id=url.searchParams.get('id'),row=await database.prepare('SELECT data FROM leads WHERE id = ? AND user_id = ?').bind(id,u.userId).first<any>();if(!row)throw new InputError('Quote not found.',404);const lead=JSON.parse(row.data);
-  return new Response(makePdf([['SwIRL sample quote',`Reference: ${id}`,`Prepared for: ${lead.organization||lead.name}`,`Sites: ${lead.sites}`,'Illustrative annual price per site: USD 399.00',`Illustrative total: USD ${(lead.sites*399).toFixed(2)}`,'DRAFT - not a binding quote or tax invoice.','No payment terms, tax exemption or license has been approved.','Prices, taxes, site scope and access terms require confirmation.']]),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="swirl-draft-quote.pdf"','Cache-Control':'private, no-store'}});
+  return new Response(makePdf([['SwIRL sample quote',`Reference: ${id}`,`Prepared for: ${lead.organization||lead.name}`,`Sites: ${lead.sites}`,'Annual price per site: USD '+(SCHOOL_ANNUAL_PRICE/100).toFixed(2),`Estimated total: USD ${(lead.sites*SCHOOL_ANNUAL_PRICE/100).toFixed(2)}`,'DRAFT - not a binding quote or tax invoice.','No payment terms, tax exemption or license has been approved.','Prices, taxes, site scope and access terms require confirmation.']]),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="swirl-draft-quote.pdf"','Cache-Control':'private, no-store'}});
  }
  throw new InputError('Not found.',404);
  }catch(e){return failure(e)}}

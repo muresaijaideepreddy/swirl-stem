@@ -3,6 +3,8 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {useAccount} from './account';
 import {Users,CheckCircle,ExternalLink,Copy,Trash2,Mail} from 'lucide-react';
 import {Checkbox} from '@/components/ui/checkbox';
+import {money} from '@/lib/catalog';
+import {SCHOOL_ANNUAL_PRICE} from '@/lib/pricing.mjs';
 
 type School={id:string;name:string;role:string;status:string;access:boolean;paidUntil:number;periodEnd:number;cancelAtEnd:boolean;syncUnavailable:boolean;hasCustomer:boolean;members:{id:string;name:string;role:string}[];invites:{id:string;expiresAt:number}[]};
 const date=(value:number)=>value?new Date(value).toLocaleDateString(): 'Not started';
@@ -18,7 +20,7 @@ export default function SchoolPage(){
  async function createInvite(s:School){const result=await act('invite-'+s.id,'school-invite',{schoolId:s.id});if(result)setInvite({school:s.id,url:location.origin+'/school#invite='+result.token});}
  if(!a.data)return null;
  return <div className="school-workspace">
-  <div className="school-intro"><div><span className="badge">TEST SUBSCRIPTIONS</span><h2>School & billing</h2><a className="underlined" href="/program">Seasonal licenses, purchase orders & quotes</a><p><strong>$399 / year per physical location.</strong> All curriculum and unlimited adult facilitators. Renews annually until canceled.</p></div><Users size={42}/></div>
+  <div className="school-intro"><div><span className="badge">TEST SUBSCRIPTIONS</span><h2>School & billing</h2><a className="underlined" href="/program">Seasonal licenses, purchase orders & quotes</a><p><strong>{money(SCHOOL_ANNUAL_PRICE)} / year per physical location.</strong> All curriculum and unlimited adult facilitators. Renews annually until canceled.</p></div><Users size={42}/></div>
   <p className="fine-print">Card payments currently run in Stripe test mode, so no live charges are made until live payments are switched on.</p>
   {!ready&&<div className="school-notice">Stripe is not connected yet. You can create your school and manage facilitators now. Subscription checkout and billing management become available after Stripe test setup.</div>}
   {error&&<p className="error school-notice" role="alert">{error} <button className="underlined" onClick={()=>void load().then(()=>setError('')).catch(e=>setError(e.message))}>Reload schools</button></p>}
@@ -34,7 +36,7 @@ export default function SchoolPage(){
     {s.cancelAtEnd&&<p>Your subscription is scheduled to end on {date(s.periodEnd)}. Paid access remains until then. Use Manage billing to review it.</p>}
     {['past_due','unpaid','incomplete','paused'].includes(s.status)&&<p className="error">Payment needs attention. The director can update the payment method in Manage billing, then refresh this page.</p>}
     {s.role==='director'?<>
-     {['none','canceled','incomplete_expired'].includes(s.status)&&<div className="school-subscribe"><div className="consent"><Checkbox id={'renew-'+s.id} checked={consent} onCheckedChange={value=>setConsent(value===true)}/><label htmlFor={'renew-'+s.id}>I authorize a $399 annual test subscription for this physical location, renewing each year until canceled. I will use test card details.</label></div><button className="button primary" disabled={!!busy||!ready||!consent} onClick={()=>void redirect(s)}>Start annual test subscription <ExternalLink size={16}/></button></div>}
+     {['none','canceled','incomplete_expired'].includes(s.status)&&<div className="school-subscribe"><div className="consent"><Checkbox id={'renew-'+s.id} checked={consent} onCheckedChange={value=>setConsent(value===true)}/><label htmlFor={'renew-'+s.id}>I authorize a {money(SCHOOL_ANNUAL_PRICE)} annual test subscription for this physical location, renewing each year until canceled. I will use test card details.</label></div><button className="button primary" disabled={!!busy||!ready||!consent} onClick={()=>void redirect(s)}>Start annual test subscription <ExternalLink size={16}/></button></div>}
      <div className="button-row school-buttons">{s.hasCustomer&&<button className="button secondary" disabled={!!busy||!ready} onClick={()=>void redirect(s,true)}>Manage billing & invoices <ExternalLink size={16}/></button>}<button className="button secondary" disabled={!!busy} onClick={()=>void act('refresh-'+s.id,'school-refresh',{schoolId:s.id}).then(r=>{if(r)setMessage('Billing status refreshed.')})}>Refresh billing status</button></div>
      <div className="school-team"><h3>Facilitators ({s.members.length})</h3><p>Give each adult their own sign-in and join link. Removing a facilitator immediately removes their school membership.</p><ul className="school-members">{s.members.map(m=><li key={m.id}><div><strong>{m.name}</strong><span>{m.role}</span></div>{m.role!=='director'&&(remove===m.id?<div className="button-row"><button className="button secondary" disabled={!!busy} onClick={()=>void act('remove-'+m.id,'school-remove',{schoolId:s.id,memberId:m.id}).then(r=>{if(r)setRemove('')})}>Confirm removal</button><button className="text-button" onClick={()=>setRemove('')}>Keep</button></div>:<button className="text-button" aria-label={'Remove '+m.name} disabled={!!busy} onClick={()=>setRemove(m.id)}><Trash2 size={17}/> Remove</button>)}</li>)}</ul>
       <button className="button secondary" disabled={!!busy} onClick={()=>void createInvite(s)}>Create facilitator join link</button>

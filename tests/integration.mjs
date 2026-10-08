@@ -23,7 +23,7 @@ await check('Concurrent distinct additions preserve both items',async()=>{await 
 await check('Downloads blocked before purchase',async()=>assert.equal((await request('download?id=wind-powered-car')).status,403));
 await check('Unconfigured Stripe checkout fails safely',()=>post('checkout',{mode:'stripe-test',key:crypto.randomUUID()},503));
 const orderKey=crypto.randomUUID();
-await check('Demo checkout ignores browser price and grants catalog items',async()=>{await post('checkout',{mode:'demo',key:orderKey,total:1,items:['robot-rescue']});const s=await state();assert.equal(s.orders[0].total,5800);assert.equal(s.orders[0].mode,'demo');assert.equal(s.owned.length,2);assert.equal(s.cart.length,0);assert.ok(!s.owned.some(p=>p.product_id==='robot-rescue'))});
+await check('Demo checkout ignores browser price and grants catalog items',async()=>{await post('checkout',{mode:'demo',key:orderKey,total:1,items:['robot-rescue']});const s=await state();assert.equal(s.orders[0].total,198);assert.equal(s.orders[0].mode,'demo');assert.equal(s.owned.length,2);assert.equal(s.cart.length,0);assert.ok(!s.owned.some(p=>p.product_id==='robot-rescue'))});
 await check('Repeated and concurrent checkout retries are idempotent',async()=>{await Promise.all(Array.from({length:4},()=>post('checkout',{mode:'demo',key:orderKey})));assert.equal((await state()).orders.filter(o=>o.status==='complete').length,1);assert.equal((await state()).owned.length,2)});
 await check('Changing mode on existing order rejected',()=>post('checkout',{mode:'stripe-test',key:orderKey},409));
 await check('Already-owned item cannot be added again',()=>post('cart',{id:'wind-powered-car',operation:'add'},409));

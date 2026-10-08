@@ -40,6 +40,7 @@ Sample checkout is deliberately available and limited to sample content. It neve
 ## Content and routes
 
 - `lib/catalog.ts`: built-in catalog (26 resources across five streams and six content types, including the Build-a-Bot Week and Chem-Lab Secrets camp tracks) and subjects.
+- `lib/pricing.mjs`: school annual plan, seasonal pass and minimum creator price in cents. All prices are currently $0.50–$0.99 for real-card payment testing (Stripe's minimum charge is $0.50); set final prices here and in `lib/catalog.ts` before launch.
 - `lib/streams.ts`: per-stream focus, deliverables, materials strategy, outcomes, standards alignment, common mistakes and cleanup tips. The standards rows were drafted from the specification and need educator review.
 - `lib/placeholder-videos.mjs`, `lib/placeholder-server.ts`, `app/placeholder-video.tsx`: public-domain NASA education videos standing in for SwIRL recordings. `/api/lesson-video` checks course access for lesson and prep videos and relays byte ranges same-origin; intro, stream and course previews are public. Replace them by publishing studio courses with private MP4 uploads.
 - `lib/course-pdf.ts`: lesson plan, student worksheet and combined course PDFs (English and preliminary Spanish) for `/api/download?kind=plan|worksheet|bundle|supplies`.
