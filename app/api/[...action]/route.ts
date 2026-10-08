@@ -1,12 +1,16 @@
 import {catalog,content,premiumAccess,product} from '@/lib/content-server';
 import {featureGet,featurePost,program} from '@/lib/feature-routes';
-import {csvCell} from '@/lib/files.mjs';
+import {csvCell,documentPdf} from '@/lib/files.mjs';
+import {courseSections,type CourseDocument} from '@/lib/course-pdf';
+import {amazonSearch} from '@/lib/catalog';
 import {assertSameOrigin,cleanIds,InputError,validateLead,validKey,verifySignature} from '@/lib/core.mjs';
 import {db,user,json,body,failure,settings,stripe,individualService,requireAccess,schoolService} from '@/lib/server';
 import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
+import {authRoute} from '@/lib/auth-routes';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
+ const authResponse=await authRoute(req);if(authResponse)return authResponse;
  const feature=await featureGet(req);if(feature)return feature;const products=await catalog(),findProduct=(id:string)=>products.find(p=>p.id===id);
  const u=await user(),url=new URL(req.url),action=url.pathname.slice(5),database=db();
  if(action==='schools')return json(await schoolService().view(u));
@@ -18,23 +22,19 @@ export async function GET(req:Request){try{
  }
  if(action==='download'){
   const id=url.searchParams.get('id')??'',p=await product(id,true);await requireAccess(u.userId,id);if(!p)throw new InputError('Resource not found.',404);
-  const kind=url.searchParams.get('kind')??'bundle',language=url.searchParams.get('lang')??'en';if(!['bundle','supplies'].includes(kind)||!['en','es'].includes(language))throw new InputError('Choose a valid download.');
-  if(kind==='supplies'){const rows=['Item,Quantity note',...p.materials.map(x=>csvCell(x)+',"Adjust for group size"')].join('\r\n');return new Response(rows,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${id}-supplies.csv"`,'Cache-Control':'private, no-store'}});}
-  const pages=language==='es'?[['Cuaderno de muestra',p.title,'Contenido de demostracion para revision por un educador.','Pregunta: Que crees que va a pasar?','Prediccion: _____________________________________','Observacion: ____________________________________','Dibuja o escribe lo que has descubierto.','Que cambiarias la proxima vez?'],['Notas para el adulto','Supervise siempre la actividad.','Adapte los materiales y las instrucciones a la edad.','La traduccion completa del curso aun no esta disponible.']]:[
-  ['SwIRL sample teaching bundle',p.title,'DEMONSTRATION CONTENT - educator review required',`Suggested ages: ${p.ages} | Activity time: ${p.minutes} minutes`,'Digital resources only. Source all materials separately.','Lesson plan, observation worksheet and materials list.'],
-  ['Facilitator lesson plan','Learning goal: Ask a question, build or observe, and explain findings.','1. Introduce the question and gather predictions.','2. Review materials and demonstrate safe handling.','3. Guide learners through a small build or observation.','4. Test one change at a time and record the results.','5. Invite learners to explain what they would try next.','Adult supervision required. Review allergies and small-part hazards.','Adults handle sharp tools, batteries and electrical connections.','Review all placeholder activities before using with children.'],
-  ['Student observation worksheet','My question: ___________________________________','My prediction: __________________________________','What I changed: _________________________________','What I observed: ________________________________','My drawing and notes:','________________________________________________','________________________________________________','Next time I would: _______________________________'],
-  ['Bill of materials',...p.materials.map(m=>'- '+m),'Quantities depend on your group size.','Materials, tools and robot kits are not included.','This sample is not a safety-certified or standards-aligned lesson.']];
-  return new Response(makePdf(pages),{headers:{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${id}-${language}-sample.pdf"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+  const kind=url.searchParams.get('kind')??'bundle',language=url.searchParams.get('lang')??'en';if(!['bundle','plan','worksheet','supplies'].includes(kind)||!['en','es'].includes(language))throw new InputError('Choose a valid download.');
+  if(kind==='supplies'){const rows=['Item,Quantity note,Find on Amazon',...p.materials.map(x=>csvCell(x)+',"Adjust for group size",'+csvCell(amazonSearch(x)))].join('\r\n');return new Response(rows,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${id}-supplies.csv"`,'Cache-Control':'private, no-store'}});}
+  const name=kind==='bundle'?'complete-course':kind==='plan'?'lesson-plan':'student-worksheet';
+  return new Response(new Uint8Array(await documentPdf(courseSections(p,kind as CourseDocument,language as 'en'|'es'),'SwIRL curriculum • Licensed to '+(u.displayName||u.email))),{headers:{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${id}-${name}-${language}.pdf"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
  if(action==='quote'){
   const id=url.searchParams.get('id'),row=await database.prepare('SELECT data FROM leads WHERE id = ? AND user_id = ?').bind(id,u.userId).first<any>();if(!row)throw new InputError('Quote not found.',404);const lead=JSON.parse(row.data);
   return new Response(makePdf([['SwIRL sample quote',`Reference: ${id}`,`Prepared for: ${lead.organization||lead.name}`,`Sites: ${lead.sites}`,'Illustrative annual price per site: USD 399.00',`Illustrative total: USD ${(lead.sites*399).toFixed(2)}`,'DRAFT - not a binding quote or tax invoice.','No payment terms, tax exemption or license has been approved.','Prices, taxes, site scope and access terms require confirmation.']]),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="swirl-draft-quote.pdf"','Cache-Control':'private, no-store'}});
  }
- if(action==='playback'){await requireAccess(u.userId,url.searchParams.get('id')??'');return json({error:'Paid course videos have not been uploaded. The public NASA sample is available in the classroom.',code:'CONTENT_NOT_CONFIGURED'},503);}
  throw new InputError('Not found.',404);
  }catch(e){return failure(e)}}
 export async function POST(req:Request){try{
+ const authResponse=await authRoute(req);if(authResponse)return authResponse;
  const feature=await featurePost(req);if(feature)return feature;const products=await catalog(),findProduct=(id:string)=>products.find(p=>p.id===id);
  const action=new URL(req.url).pathname.slice(5),rawBody=await req.text();if(rawBody.length>250000)throw new InputError('Request too large.',413);
  if(action==='stripe-webhook'){

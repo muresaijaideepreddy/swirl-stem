@@ -101,3 +101,33 @@ Added creator-managed YouTube links for student, prep and preview videos, defaul
 Verification: 39 focused service/validation tests passed, including six YouTube groups; TypeScript and production build passed; five new local Worker API scenarios passed. These cover malformed/spoofed URLs, anonymous/foreign access, cross-origin mutation, metadata validation, retries, re-adding an older video, unpublished replacements, premium denial, published removal protection and the public sample introduction. No YouTube account credentials or actual user video were supplied, so this does not confirm the user's own upload, unlisted setting or embedding permissions. Payment testing remains excluded.
 
 Browser verification: the new form rejected a non-YouTube URL, saved the linked public NASA/JPL sample, opened its preview and played it inside the embedded YouTube player. This checks the player integration with existing sample content, not an actual user-owned unlisted video.
+
+## Document gap closure — October 8 (second pass)
+
+A line-by-line re-check of **STEM Curriculum Website.docx** against the code found these gaps, now closed:
+
+| Gap | Fix |
+| --- | --- |
+| Intro video was hidden behind a button, not shown on the first page | Inline "How the curriculum works" section on the homepage with the introduction player (studio-selected intro when configured, otherwise a credited NASA video) |
+| Sample catalog had no lesson videos ("pick sample videos from the internet as placeholders") | 23 public-domain NASA education videos mapped to every video lesson, a 60-second prep slot and public previews. `/api/lesson-video` enforces purchase/school/pass access and relays byte ranges; no YouTube publishing |
+| Each domain page did not list every content kind; no PDF books; no week-long camp tracks | Catalog grows from 8 to 26 resources: every stream offers courses, online videos, PDF books, workbooks, lesson plans and materials lists; Build-a-Bot Week and Chem-Lab Secrets camp tracks; content-type browse pills |
+| Stream pages lacked overview, outcomes and standards alignment | Stream overview, key deliverables, materials strategy, learning outcomes and an NGSS / early-learning / CSTA / Common Core alignment table (drafted; needs educator review) |
+| Hero CTAs and value counters differed from the PRD | "Zero-prep STEM built for camps / after-school / early learning / families" headline, "Request a free pilot unit" and "Explore curriculum streams" CTAs, computed lesson/stream/setup counters |
+| Stream selector had no sample video clip | Inline free preview clip and deliverables per stream tab |
+| Classroom lacked prep video, setup time, separate plan/worksheet downloads | 60-sec counselor prep tab with video, mistakes and cleanup tips; quick stats incl. setup; per-lesson student video in presentation/focus mode; lesson plan PDF, student worksheet PDF, complete course PDF (EN/ES) and supply CSV |
+| Combined course PDF was a 4-page stub | Full lesson plan per lesson, a student page per lesson, bill of materials, safety guide and standards, watermarked with the account |
+| No "1-Click Supplies" view | Classroom tab with every module's materials, Amazon search links (no affiliate tag), per-module and combined CSV |
+| Audience pages were one paragraph | Daycare (sensory, play-based, parent sheets, milestones), after-school (45–60 min pacing, grocery supplies, zero-prep guides), camp (week tracks, flyers, Friday showcase) and family pages with recommended curriculum |
+| Facilitator invites were link-only | "Email invite" opens the director's mail app with the single-use link |
+
+Verification: TypeScript and production build pass; 140 unit tests pass (6 new placeholder-video tests); all integration suites pass against the local Worker — 42 storefront (7 new video/download checks), 13 school, 20 feature, 5 YouTube and 16 private-video scenarios. Headless Chrome rendered home, stream, course, classroom, camp, daycare and supplies pages at 1280 px and 390 px with no console errors or horizontal overflow, and a gated lesson video played and seeked.
+
+Prototype/demo wording was removed from public pages, PDFs and legal pages. Wording that describes the current payment mode (free demo checkout, Stripe test mode, test receipts) is intentionally kept accurate until live payments are enabled; switching Stripe to live mode was not done in this pass.
+
+## Google sign-in, contact page and sample-data walkthrough — October 8
+
+- **Google-only sign-in** replaces "Sign in with ChatGPT": authorization code + PKCE, single-use hashed state, nonce, issuer/audience/expiry/verified-email checks, hashed 30-day sessions, same-origin sign-out. 8 unit tests and 4 Worker scenarios cover replay, forged cookies, off-site return paths, cancellations, token-endpoint failures and unverified accounts. With production settings, forged `oai-authenticated-*` headers now return 401. Real Google sign-in has not been exercised yet: it needs the OAuth client ID/secret and the deployed https origin.
+- **Contact page** (`/contact`): anonymous, consent-gated, rate-limited messages appear in the Studio inquiry inbox, giving the privacy and terms pages a real contact route.
+- **Sample data** (`scripts/seed-sample-data.mjs`, local only): parent, tutor, director with two locations, two facilitators who joined by link, pilot/quote/PO requests, a paid summer robotics pass, sample and contact inquiries.
+- **Walkthrough**: 17 screens as visitor, parent, director, facilitator and admin on desktop, iPad (gen 7) and Pixel 7 emulation; no horizontal overflow or application errors (the only console entry is the expected 401 for signed-out visitors). Local network-idle load times were 1.0–1.5 s; production and cellular timing still need measuring.
+- Totals: 148 unit tests; 47 storefront, 13 school, 20 feature, 5 YouTube and 16 private-video Worker scenarios, all passing.

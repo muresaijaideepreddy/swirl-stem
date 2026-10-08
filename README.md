@@ -13,10 +13,12 @@ npm run install:ci
 npm run dev
 ```
 
-The starter's development sign-in flow uses a local synthetic account. Production identity comes from the Sites dispatcher; do not expose the Worker directly while trusting arbitrary client-supplied `oai-authenticated-*` headers.
+Visitors sign in with Google (`lib/google-auth.mjs`, `lib/auth-routes.ts`): authorization code flow with PKCE, single-use state, nonce and ID-token claim checks, and 30-day sessions stored only as SHA-256 hashes in D1. Configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and an https `SITE_ORIGIN`, and register `<SITE_ORIGIN>/api/auth/callback` as the authorized redirect URI. Sites `oai-authenticated-*` headers are ignored unless `LOCAL_TEST_AUTH=true` **and** the request host is localhost; the integration suites and local dev rely on that (start the Worker with `--var LOCAL_TEST_AUTH:true`). Never set it in production. Admins are bootstrapped from `CONTENT_ADMIN_EMAILS` (Google-verified email).
+
+To preview every screen with realistic records, run `node scripts/seed-sample-data.mjs http://127.0.0.1:8787 --persist-to .wrangler/state` against a local Worker; it refuses non-localhost origins.
 
 ```sh
-node --test tests/core.test.mjs tests/school-billing.test.mjs tests/content.test.mjs tests/program-billing.test.mjs tests/individual-billing.test.mjs tests/social-layout.test.mjs tests/webhook-forwarder.test.mjs
+node --test tests/core.test.mjs tests/school-billing.test.mjs tests/content.test.mjs tests/program-billing.test.mjs tests/individual-billing.test.mjs tests/social-layout.test.mjs tests/webhook-forwarder.test.mjs tests/youtube.test.mjs tests/storage-video.test.mjs tests/placeholder-videos.test.mjs tests/google-auth.test.mjs
 npx tsc --noEmit
 npm run build
 ```
@@ -27,7 +29,7 @@ Apply the generated migration to the local database once before API testing:
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_overrated_firedrake.sql
 ```
 
-Apply `drizzle/0001_damp_mister_fear.sql` then `drizzle/0002_past_azazel.sql` then `drizzle/0003_dear_rhino.sql`, `drizzle/0004_omniscient_falcon.sql` and `drizzle/0005_tiresome_moonstone.sql` with the same local command. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` , `node tests/school-integration.mjs` and `node tests/feature-integration.mjs`. Feature tests require a local synthetic `local_seedy` administrator in `content_users` (never create this identity in production). The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
+Apply `drizzle/0001_damp_mister_fear.sql` then `drizzle/0002_past_azazel.sql` then `drizzle/0003_dear_rhino.sql`, `drizzle/0004_omniscient_falcon.sql`, `drizzle/0005_tiresome_moonstone.sql` and `drizzle/0006_abnormal_bill_hollister.sql` (Google sessions, sign-in state, contact messages) with the same local command. Run the built Worker locally on 127.0.0.1:8787, then `node tests/integration.mjs` , `node tests/school-integration.mjs` and `node tests/feature-integration.mjs`. Feature tests require a local synthetic `local_seedy` administrator in `content_users` (never create this identity in production). The integration harness sends synthetic trusted identity headers **only to localhost**, creates test records and does not make real payments. Its reports and downloaded samples are written to ignored `work/qa/`.
 
 ## Configuration
 
@@ -37,7 +39,10 @@ Sample checkout is deliberately available and limited to sample content. It neve
 
 ## Content and routes
 
-- `lib/catalog.ts`: sample product data and subjects.
+- `lib/catalog.ts`: built-in catalog (26 resources across five streams and six content types, including the Build-a-Bot Week and Chem-Lab Secrets camp tracks) and subjects.
+- `lib/streams.ts`: per-stream focus, deliverables, materials strategy, outcomes, standards alignment, common mistakes and cleanup tips. The standards rows were drafted from the specification and need educator review.
+- `lib/placeholder-videos.mjs`, `lib/placeholder-server.ts`, `app/placeholder-video.tsx`: public-domain NASA education videos standing in for SwIRL recordings. `/api/lesson-video` checks course access for lesson and prep videos and relays byte ranges same-origin; intro, stream and course previews are public. Replace them by publishing studio courses with private MP4 uploads.
+- `lib/course-pdf.ts`: lesson plan, student worksheet and combined course PDFs (English and preliminary Spanish) for `/api/download?kind=plan|worksheet|bundle|supplies`.
 - `app/site.tsx`, `app/views.tsx`, `app/globals.css`: storefront and classroom.
 - `app/api/[...action]/route.ts`: account-scoped cart, checkout, requests, downloads and progress.
 - `lib/server.ts`, `lib/core.mjs`: authorization, validation and payment checks.

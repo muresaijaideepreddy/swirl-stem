@@ -1,12 +1,17 @@
 import {individualBilling} from './individual-billing.mjs';
 import {env} from 'cloudflare:workers';
+import {headers} from 'next/headers';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
+import {googleAuth} from './google-auth.mjs';
 import {InputError,assertTestKey,isPayableSession} from './core.mjs';
 import {catalog,product,premiumAccess} from './content-server';
 import {schoolBilling,schoolAccess} from './school-billing.mjs';
 export function db(){if(!env.DB)throw new InputError('Your classroom is temporarily unavailable. Please try again shortly.',503);return env.DB;}
 export function settings(){return env as unknown as Record<string,string>}
-export async function user(){const u=await getChatGPTUser();if(!u)throw new InputError('Sign in to continue.',401);return u;}
+export function auth(){return googleAuth({db:db(),settings:settings()})}
+// Google session cookie only. Platform identity headers are honoured solely for local tests on localhost with LOCAL_TEST_AUTH=true.
+export function localTestAuth(host:string|null){return settings().LOCAL_TEST_AUTH==='true'&&['localhost','127.0.0.1','[::1]'].includes((host??'').replace(/:\d+$/,''));}
+export async function user(){const h=await headers();const u=await auth().session(h.get('cookie'))??(localTestAuth(h.get('host'))?await getChatGPTUser():null);if(!u)throw new InputError('Sign in to continue.',401);return u;}
 export function json(value:unknown,status=200){return Response.json(value,{status,headers:{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
 export async function body(req:Request,rawInput?:string){if(!req.headers.get('content-type')?.includes('application/json'))throw new InputError('Send JSON data.',415);const raw=rawInput??await req.text();if(raw.length>16000)throw new InputError('The request is too large.',413);let parsed;try{parsed=JSON.parse(raw)}catch{throw new InputError('The request could not be read.');}if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new InputError('Expected a JSON object.');return parsed;}
 export function failure(e:unknown){if(e instanceof InputError)return json({error:e.message},e.status);console.error('Request failed',e instanceof Error?e.message:'Unknown error');return json({error:'Something went wrong. Your request was not confirmed. Please try again.'},503);}
