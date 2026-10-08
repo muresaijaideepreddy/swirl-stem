@@ -1,13 +1,13 @@
 # SwIRL specification implementation and validation
 
-Updated October 7, 2026 against **STEM Curriculum Website.docx**, including its detailed PRD. The software workflows below are implemented. This remains a private, test-mode website; actual provider accounts, approved curriculum and launch acceptance are separate outstanding work. No real payment was made.
+Updated October 8, 2026 against **STEM Curriculum Website.docx**, including its detailed PRD. The software workflows below are implemented. This remains a private, test-mode website; actual provider accounts, approved curriculum and launch acceptance are separate outstanding work. No real payment was made.
 
 ## Requirement coverage
 
 | Document requirement | Implementation | Verification / remaining dependency |
 | --- | --- | --- |
-| Introduction video, hero CTAs and five STEM domains | Homepage, five subject pages, public video placeholder, owner-selectable introduction video | Placeholder remains until an approved introduction is uploaded and Mux is connected |
-| Interactive stream previews without site account | Five sample tabs and public PDF previews | Local anonymous API checks; private hosting still requires owner-approved site access |
+| Introduction video, hero CTAs and five STEM domains | Homepage, five subject pages, public video placeholder, owner-selectable introduction video | Introduction selection validates a published sample with a ready preview. Private MP4 storage works without Mux; approved introduction content is still needed. |
+| Interactive stream previews without site account | Five keyboard-accessible sample tabs, public PDF previews, contextual sample dialogs and audience cards | Local anonymous API checks; private hosting still requires owner-approved site access |
 | Partner logos and impact counters | Administrator can upload permission-approved logos and edit factual metrics | No invented endorsement or impact claim; organization must supply approved data |
 | Age, topic, format, duration, supply and material search | Catalog and classroom filters, subject/time word search, week-camp tracks, sorting, combined filters and empty-state reset | Core and browser checks |
 | Digital store and individual purchases | Durable cart, sample checkout, immutable pending Stripe orders, cross-tab retry recovery, verified fulfillment, private receipts and invoice refresh | Real Stripe sandbox acceptance not performed |
@@ -20,9 +20,9 @@ Updated October 7, 2026 against **STEM Curriculum Website.docx**, including its 
 | PO, exemption certificates and Net30 | Private PDF certificate upload, requester/admin access, administrator review, test invoice creation, hosted invoice link, payment refresh and annual license after verified payment | Local persistence/access tests and simulated invoice tests; no exemption is self-approved |
 | Facilitator invitations and supplies | Single-use expiring shareable join links, revoke/remove, materials CSV for each module | School/API tests. Share links and CSV implement the alternatives permitted by the document |
 | Marketing hub | Customizable flyer/newsletter PDFs and social graphic download | Template endpoints checked; actual marketing copy/photos remain owner inputs |
-| CMS without developer involvement | Creator access requests, owner approval, drafts, metadata/taxonomy, nested lessons, English/Spanish PDF books/plans/workbooks, images, captions, supplies and resumable video upload/cancel controls | Browser created/saved/reopened/uploaded/published a sample lesson; video transport needs Mux |
+| CMS without developer involvement | Creator access requests, owner approval, drafts, metadata/taxonomy, nested lessons, English/Spanish PDF books/plans/workbooks, images, captions, supplies and resumable video upload/cancel controls | Browser created/saved/reopened/uploaded/published a sample lesson; private MP4 upload and playback tested with actual synthetic video |
 | Publication and safe editing | Administrator-only publish/archive, ownership, optimistic revision checks, stable lesson IDs, separate public snapshots, revision-fenced file attachment | Tests cover stale saves, first-upload race, ownership and archive bypass |
-| Private adaptive video streaming | Mux direct upload, processing status, signed HLS playback, prep/student/preview slots, captions | Integration implemented; credentials/signing key and actual media are missing, so provider playback is unverified |
+| Private video streaming | Default R2 multipart MP4 upload, pause/resume/cancel, immediate preview, authorized streaming/byte ranges, prep/student/preview slots and captions. Optional Mux adaptive adapter retained. | Real 23 MB MP4 uploaded and played locally; 8 MiB chunk boundaries and seek responses checked. Mux adaptive mode remains unconfigured; R2 does not transcode or provide DRM. |
 | Classroom / zero-prep portal | Preparation, presentation, quick stats, steps, saved completion, fullscreen mode, resource search | Actual local browser workflow checked |
 | PDF viewer, bundles and watermarking | Private R2 files, individual viewer/download, combined uploaded PDFs plus generated teaching notes/materials, account watermark | Worker upload/download checks and rendered PDF inspection |
 | English/Spanish worksheets | Language-tagged uploads, language switch, explicit missing-translation state | API missing-language check and browser switch; actual translations must be supplied |
@@ -32,14 +32,16 @@ Updated October 7, 2026 against **STEM Curriculum Website.docx**, including its 
 
 ## Executed checks
 
-**181 automated checks passed: 111 service/validation groups and 70 built-Worker API scenarios.**
+**213 automated checks passed: 127 service/validation groups and 86 built-Worker API scenarios.**
 
 - 17 core validation groups (`tests/core.test.mjs`).
-- 34 annual billing/team service groups (`tests/school-billing.test.mjs`).
+- 35 annual billing/team service groups (`tests/school-billing.test.mjs`).
 - 19 content/file service groups (`tests/content.test.mjs`).
-- 19 seasonal/PO/notification service groups (`tests/program-billing.test.mjs`).
+- 21 seasonal/PO/notification service groups (`tests/program-billing.test.mjs`).
 - 18 individual Stripe billing groups (`tests/individual-billing.test.mjs`).
 - 1 bounded social-graphic layout group (`tests/social-layout.test.mjs`).
+- 13 private MP4 upload/parser/range service groups (`tests/storage-video.test.mjs`).
+- 16 private MP4 Worker scenarios (`tests/storage-video-integration.mjs`), using real synthetic H.264/AAC fixtures.
 - 3 private webhook-forwarding groups (`tests/webhook-forwarder.test.mjs`).
 - 37 storefront Worker/D1 API scenarios (`tests/integration.mjs`).
 - 13 school Worker/D1 API scenarios (`tests/school-integration.mjs`).
@@ -55,14 +57,14 @@ The final rejection-to-upload sequence verifies recovery after invalid, foreign-
 
 The local browser created a new lesson, rejected a blank required form, saved/reopened it, uploaded a PDF, published it, found it in the catalog, completed sample checkout, opened the classroom and saved completion. English/Spanish selection and combined download were checked. The combined download contained the uploaded worksheet and generated lesson notes/materials. Rendered pages had no clipped or overlapping text. The checked 320 px and 1024 px classroom viewports had no horizontal overflow; browser error logs were empty at inspection.
 
-The previous release verified owner administrator controls and all 21 expected D1 tables on the private deployment. This revision adds migration 0003 for immutable order snapshots and verified payment/receipt fields. Deployment verification is recorded separately from local tests.
+The previous release verified owner administrator controls and all 21 expected D1 tables on the private deployment. This revision adds migrations 0004–0005 for multipart video sessions, immutable seasonal checkout snapshots and paid receipt details. Deployment verification is recorded separately from local tests.
 
 These are bounded, executed checks, not a claim that every possible edge case or device has been tested. The previous storefront and school browser checks remain documented in Git history.
 
 ## External setup and acceptance still required
 
 1. **Stripe:** install organization-owned test credentials, run the included loopback signature-verifying bridge or an approved delivery route through the private hosting gateway, then exercise successful/declined/3DS cards, renewal/test clocks, invoice payment, portal and real sandbox webhook delivery. Live keys remain refused. Tax configuration must match actual registrations and approved exemption evidence.
-2. **Mux:** connect API credentials and signing keys; upload approved video content and validate resumable upload, processing, captions and signed adaptive playback against that account.
+2. **Optional adaptive delivery:** private MP4 upload and playback now use existing R2 storage, as requested. Mux remains optional for transcoding/adaptive HLS; connecting that adapter would require its account/signing keys and provider testing.
 3. **Email:** configure Resend and a verified sender. PO acknowledgments are queued honestly while unavailable. Review/retry the outbox from the studio; expired ambiguous retries require operational review.
 4. **Content/business approval:** provide the introduction, real premium videos, teaching PDFs, translations, images, standards mappings, approved logos/metrics, final prices and license/refund/privacy/safety terms. Generated samples are placeholders permitted by the original brief.
 5. **Launch QA:** run the requested five-center pilot (one daycare, two after-school programs, two camps), test physical iPads and lower-spec Android tablets, screen readers and degraded connectivity, and measure the two-second load target. No real center pilot or compliance certification has occurred.
@@ -81,3 +83,11 @@ Repeated document, billing and UI reviews closed the concrete gaps found: persis
 The current local browser checked the new readiness panel, disabled sandbox probe without credentials, PDF Book format and upload purpose, a saved unpublished preview, English fallback and uploaded Spanish CSV selection, disabled preview before first save, combined “30 min physics” search, combined-filter empty states and storefront PDF Book filtering. Captured browser errors were empty at the final inspection. Earlier full create/save/upload/publish/classroom and PDF-render evidence remains applicable; no provider video operation has been claimed tested.
 
 Payment setup is now visible to the administrator in Studio. Its configuration checks and read-only Stripe connection probe do not prove card processing, renewals or webhook fulfillment. The included private-site webhook bridge has signature, tamper/replay, live-event, payload-limit, fixed-destination, redirect and upstream-failure tests. It has not been connected to the organization's Stripe account. See BILLING_SETUP.md for account acceptance steps.
+
+## October 8 fixes and video verification
+
+Closed the five fresh audit findings: an unpaid school replacement checkout cannot be bypassed after an old subscription cancellation; a seasonal checkout cannot silently retain different selected dates; paid seasonal licenses have an owner-only PDF receipt; the sample response uses the corrected NASA/JPL source; and invalid or unready introductions are rejected before saving. Seasonal Checkout parameters and the receipt location are now immutable across provider retries.
+
+The private MP4 service stores chunks in R2, verifies size/header structure, saves immutable chunk hashes and ETags, and uses fenced D1 transactions for attachment. Cancellation, stale leases, provider-completed-but-unrecorded objects, draft changes, revoked roles, wrong ownership, bad content and stale introductions are covered. Videos must be H.264 MP4/AAC with Fast Start metadata in the first 8 MiB, up to 2 GiB and two hours. Header validation does not prove every frame decodes; creators must watch the preview before publication. Browser playback and seeking were verified on the generated 18-second, 23,490,366-byte test file. This is test-pattern media, not approved curriculum.
+
+Browser checks also covered sample form required fields, successful sample submission, subject selection by keyboard, the uploaded-video dialog, the saved-draft teaching view and presentation exit. Teaching layouts at 320 px and 1024 px had no horizontal overflow. Pause stopped at a saved 35% chunk boundary and resumed from that position to completion. Canceling another upload showed an explicit canceled state and added no ready asset. Physical iPad/Android testing, a five-center pilot, production email delivery and the cellular performance target remain unverified external acceptance items.

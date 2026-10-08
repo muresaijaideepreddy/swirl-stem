@@ -91,3 +91,5 @@ export async function POST(req:Request){try{
  }
  throw new InputError('Not found.',404);
  }catch(e){return failure(e)}}
+
+export async function HEAD(req:Request){const response=await GET(req);return new Response(null,{status:response.status,headers:response.headers});}

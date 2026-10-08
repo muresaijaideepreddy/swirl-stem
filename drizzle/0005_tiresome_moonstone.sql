@@ -1,0 +1,1 @@
+ALTER TABLE `licenses` ADD `checkout_data` text;
