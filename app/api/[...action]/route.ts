@@ -2,7 +2,7 @@ import {catalog,content,premiumAccess,product} from '@/lib/content-server';
 import {featureGet,featurePost,program} from '@/lib/feature-routes';
 import {csvCell} from '@/lib/files.mjs';
 import {assertSameOrigin,cleanIds,InputError,validateLead,validKey,verifySignature} from '@/lib/core.mjs';
-import {db,user,json,body,failure,settings,stripe,fulfill,requireAccess,schoolService} from '@/lib/server';
+import {db,user,json,body,failure,settings,stripe,individualService,requireAccess,schoolService} from '@/lib/server';
 import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
 export const dynamic='force-dynamic';
@@ -11,7 +11,7 @@ export async function GET(req:Request){try{
  const u=await user(),url=new URL(req.url),action=url.pathname.slice(5),database=db();
  if(action==='schools')return json(await schoolService().view(u));
  if(action==='state'){
-  const [cart,owned,orders,leads,progress]=await Promise.all([database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>(),database.prepare('SELECT product_id,mode FROM entitlements WHERE user_id = ?').bind(u.userId).all(),database.prepare('SELECT id,items,total,status,mode,created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 30').bind(u.userId).all(),database.prepare('SELECT id,data,created_at FROM leads WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').bind(u.userId).all(),database.prepare('SELECT product_id,completed FROM progress WHERE user_id = ?').bind(u.userId).all()]);
+  const [cart,owned,orders,leads,progress]=await Promise.all([database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>(),database.prepare('SELECT product_id,mode FROM entitlements WHERE user_id = ?').bind(u.userId).all(),database.prepare('SELECT id,items,total,status,mode,created_at,snapshot,paid_total,invoice_url,invoice_pdf,session_id FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 30').bind(u.userId).all(),database.prepare('SELECT id,data,created_at FROM leads WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').bind(u.userId).all(),database.prepare('SELECT product_id,completed FROM progress WHERE user_id = ?').bind(u.userId).all()]);
   const schools=await schoolService().accessSchools(u.userId),schoolOwned=schools.some(s=>schoolAccess(s))?products.filter(p=>!owned.results.some(o=>o.product_id===p.id)).map(p=>({product_id:p.id,mode:'school-test'})):[];
   const passes=(await database.prepare("SELECT l.scope FROM licenses l JOIN school_members m ON m.school_id=l.school_id WHERE m.user_id=? AND l.status='paid' AND l.starts_at<=? AND l.ends_at>?").bind(u.userId,Date.now(),Date.now()).all<any>()).results;const passOwned=products.filter(p=>passes.some(l=>l.scope==='all'||l.scope===p.id||l.scope==='subject:'+p.subject)).map(p=>({product_id:p.id,mode:'school-license-test'}));
   return json({user:{name:u.displayName,email:u.email},libraryProducts:(await catalog(true)).filter(p=>owned.results.some(o=>o.product_id===p.id)||schools.some(s=>schoolAccess(s))||passes.some(l=>l.scope==='all'||l.scope===p.id||l.scope==='subject:'+p.subject)),role:await content().role(u),cart:cart?JSON.parse(cart.items):[],owned:[...owned.results,...schoolOwned,...passOwned],orders:orders.results,requests:leads.results,progress:progress.results,stripeReady:settings().STRIPE_SECRET_KEY?.startsWith('sk_test_')===true});
@@ -42,7 +42,7 @@ export async function POST(req:Request){try{
   let event:any;try{event=JSON.parse(raw)}catch{throw new InputError('Invalid event.');}if(!event||typeof event.id!=='string'||!/^evt_[A-Za-z0-9]+$/.test(event.id)||typeof event.type!=='string'||!event.data?.object||event.livemode!==false)throw new InputError('Only valid Stripe test events are accepted.');
   if(await db().prepare('SELECT id FROM events WHERE id = ?').bind(event.id).first())return json({received:true});
   const programEvent=await program().webhook(event),schoolEvent=programEvent||await schoolService().webhook(event);
-  if(!schoolEvent&&['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)){const order=await db().prepare('SELECT id FROM orders WHERE session_id=?').bind(event.data.object.id).first();if(order)await fulfill(event.data.object.id);}
+  if(!schoolEvent)await individualService().webhook(event);
   await db().prepare('INSERT INTO events(id,created_at) VALUES (?,?) ON CONFLICT(id) DO NOTHING').bind(event.id,Date.now()).run();return json({received:true});
  }
  assertSameOrigin(req);const u=await user(),b=await body(req,rawBody),database=db();
@@ -64,13 +64,12 @@ export async function POST(req:Request){try{
   const cart=await database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>();return json({cart:cart?JSON.parse(cart.items):[]});
  }
  if(action==='checkout'){
-  const key=validKey(b.key),orderId=u.userId+':'+key,mode=b.mode;if(!['demo','stripe-test'].includes(mode))throw new InputError('Choose a supported checkout mode.');
+  const key=validKey(b.key),orderId=u.userId+':'+key,mode=b.mode;if(!['demo','stripe-test'].includes(mode))throw new InputError('Choose a supported checkout mode.');if(mode==='stripe-test')return json(await individualService().checkout(u,key));
   const existing=await database.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').bind(orderId,u.userId).first<any>();
   if(existing&&existing.mode!==mode)throw new InputError('This checkout belongs to another payment mode. Refresh and try again.',409);
   if(existing?.status==='complete')return json({status:'complete'});
   const currentCart=await database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>();
   if(existing && (JSON.stringify(JSON.parse(existing.items).sort())!==JSON.stringify(cleanIds(currentCart?JSON.parse(currentCart.items):[],products.map(p=>p.id)).sort()) || JSON.parse(existing.items).reduce((sum:number,id:string)=>sum+(findProduct(id)?.price??-1),0)!==existing.total))throw new InputError('The cart or pricing changed. Refresh and start a new checkout.',409);
-  if(existing?.session_id){const session=await stripe('checkout/sessions/'+encodeURIComponent(existing.session_id));if(session.status==='open')return json({url:session.url});if(session.status==='complete')return json(await fulfill(existing.session_id));throw new InputError('This checkout expired. Refresh to start again.',409);}
   const cart=await database.prepare('SELECT items FROM carts WHERE user_id = ?').bind(u.userId).first<any>();let ids=cleanIds(cart?JSON.parse(cart.items):[],products.map(p=>p.id));
   const owned=await database.prepare('SELECT product_id FROM entitlements WHERE user_id = ?').bind(u.userId).all<any>();ids=ids.filter(id=>!owned.results.some(r=>r.product_id===id));if(!ids.length)throw new InputError('Your cart is empty or these resources are already in your classroom.');
   const total=ids.reduce((sum,id)=>sum+findProduct(id)!.price,0),now=Date.now();
@@ -78,16 +77,9 @@ export async function POST(req:Request){try{
    if(ids.some(id=>findProduct(id)?.custom&&!findProduct(id)?.sample))throw new InputError('Premium curriculum requires a paid test license. Remove premium items to use demo checkout.',403);
    await database.batch([database.prepare("INSERT INTO orders(id,user_id,items,total,status,mode,created_at) VALUES (?,?,?,?,'complete','demo',?) ON CONFLICT(id) DO NOTHING").bind(orderId,u.userId,JSON.stringify(ids),total,now),database.prepare("INSERT INTO entitlements(user_id,product_id,order_id,mode,created_at) SELECT o.user_id, j.value, o.id, 'demo', o.created_at FROM orders o, json_each(o.items) j WHERE o.id = ? AND o.user_id = ? AND o.mode = 'demo' AND o.status = 'complete' ON CONFLICT(user_id,product_id) DO NOTHING").bind(orderId,u.userId),database.prepare("UPDATE carts SET items = (SELECT coalesce(json_group_array(value),'[]') FROM json_each(carts.items) WHERE value NOT IN (SELECT product_id FROM entitlements WHERE user_id = ?)), updated_at = ? WHERE user_id = ?").bind(u.userId,now,u.userId)]);return json({status:'complete'});
   }
-  const origin=settings().SITE_ORIGIN;if(!origin||!origin.startsWith('https://')||new URL(origin).origin!==origin)throw new InputError('Stripe return URL has not been configured.',503);
-  await database.prepare("INSERT INTO orders(id,user_id,items,total,status,mode,created_at) VALUES (?,?,?,?,'pending','stripe-test',?) ON CONFLICT(id) DO NOTHING").bind(orderId,u.userId,JSON.stringify(ids),total,now);
-  const persisted=await database.prepare('SELECT items FROM orders WHERE id = ?').bind(orderId).first<any>();ids=JSON.parse(persisted.items);
-  const form=new URLSearchParams({mode:'payment',success_url:origin+'/checkout?session_id={CHECKOUT_SESSION_ID}',cancel_url:origin+'/cart?canceled=1',client_reference_id:orderId,'metadata[user_id]':u.userId,'payment_method_types[0]':'card'});
-  ids.forEach((id,i)=>{const p=findProduct(id)!;form.set(`line_items[${i}][price_data][currency]`,'usd');form.set(`line_items[${i}][price_data][unit_amount]`,String(p.price));form.set(`line_items[${i}][price_data][product_data][name]`,p.title+' (prototype test)');form.set(`line_items[${i}][quantity]`,'1');});
-  const session=await stripe('checkout/sessions',form,'swirl-'+orderId);await database.prepare('UPDATE orders SET session_id = ? WHERE id = ?').bind(session.id,orderId).run();return json({url:session.url});
  }
- if(action==='verify-checkout'){
-  if(typeof b.sessionId!=='string'||!/^cs_test_[A-Za-z0-9_]+$/.test(b.sessionId))throw new InputError('Invalid checkout session.');const order=await database.prepare('SELECT id FROM orders WHERE session_id = ? AND user_id = ?').bind(b.sessionId,u.userId).first();if(!order)throw new InputError('Order not found.',404);return json(await fulfill(b.sessionId));
- }
+ if(action==='verify-checkout')return json(await individualService().confirm(u,b.sessionId));
+ if(action==='checkout-cancel')return json(await individualService().cancel(u,b.orderId));
  if(action==='request'){
   const lead=validateLead(b),id=u.userId+':'+validKey(b.key),now=Date.now();const prior=await database.prepare('SELECT data FROM leads WHERE id = ? AND user_id = ?').bind(id,u.userId).first<any>();if(prior){if(prior.data!==JSON.stringify(lead))throw new InputError('This request changed. Reload to save a new request.',409);return json({id,status:'saved',message:'Your prototype request is saved in your account. No email was sent and no license or invoice has been issued.'});}const count=await database.prepare('SELECT count(*) AS count FROM leads WHERE user_id = ? AND created_at > ?').bind(u.userId,now-3600000).first<any>();if(count?.count>=10)throw new InputError('Too many requests. Please try again in an hour.',429);
   await database.prepare('INSERT INTO leads(id,user_id,data,created_at) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,u.userId,JSON.stringify(lead),now).run();return json({id,status:'saved',message:'Your prototype request is saved in your account. No email was sent and no license or invoice has been issued.'});

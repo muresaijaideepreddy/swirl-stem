@@ -21,3 +21,7 @@
 .editor-fieldset{border:0;padding:0;margin:0;min-width:0}.course-cover{width:100%;height:100%;object-fit:cover}.library-search{display:block;margin:24px 0}.library-search input,.school-switcher select{display:block;padding:12px;border:1px solid #a7b9ab;border-radius:7px;background:white;width:100%;margin-top:8px}.school-switcher{display:block;margin:25px 0}
 
 .partner-logos{display:flex;gap:32px;align-items:center;justify-content:center;flex-wrap:wrap;padding-top:24px;padding-bottom:24px}.partner-logos img{max-width:160px;max-height:90px;object-fit:contain}.impact-counter{text-align:center;padding:32px}.impact-counter strong{display:block;font-size:54px;color:#234f49}.impact-counter span{font-size:18px}
+
+.library-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 20px}.library-search input{width:100%}@media(max-width:700px){.library-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}}@media(max-width:390px){.library-filters{grid-template-columns:1fr}}
+
+.page-head h1,.presentation h2,.record,.request-record,.school-card,.library-card,.file-list strong{overflow-wrap:anywhere}.file-list li{flex-wrap:wrap}
