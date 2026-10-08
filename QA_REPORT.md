@@ -32,7 +32,7 @@ Updated October 8, 2026 against **STEM Curriculum Website.docx**, including its 
 
 ## Executed checks
 
-**213 automated checks passed: 127 service/validation groups and 86 built-Worker API scenarios.**
+**214 automated checks passed: 128 service/validation groups and 86 built-Worker API scenarios.**
 
 - 17 core validation groups (`tests/core.test.mjs`).
 - 35 annual billing/team service groups (`tests/school-billing.test.mjs`).
@@ -40,7 +40,7 @@ Updated October 8, 2026 against **STEM Curriculum Website.docx**, including its 
 - 21 seasonal/PO/notification service groups (`tests/program-billing.test.mjs`).
 - 18 individual Stripe billing groups (`tests/individual-billing.test.mjs`).
 - 1 bounded social-graphic layout group (`tests/social-layout.test.mjs`).
-- 13 private MP4 upload/parser/range service groups (`tests/storage-video.test.mjs`).
+- 14 private MP4 upload/parser/range service groups (`tests/storage-video.test.mjs`).
 - 16 private MP4 Worker scenarios (`tests/storage-video-integration.mjs`), using real synthetic H.264/AAC fixtures.
 - 3 private webhook-forwarding groups (`tests/webhook-forwarder.test.mjs`).
 - 37 storefront Worker/D1 API scenarios (`tests/integration.mjs`).
@@ -91,3 +91,5 @@ Closed the five fresh audit findings: an unpaid school replacement checkout cann
 The private MP4 service stores chunks in R2, verifies size/header structure, saves immutable chunk hashes and ETags, and uses fenced D1 transactions for attachment. Cancellation, stale leases, provider-completed-but-unrecorded objects, draft changes, revoked roles, wrong ownership, bad content and stale introductions are covered. Videos must be H.264 MP4/AAC with Fast Start metadata in the first 8 MiB, up to 2 GiB and two hours. Header validation does not prove every frame decodes; creators must watch the preview before publication. Browser playback and seeking were verified on the generated 18-second, 23,490,366-byte test file. This is test-pattern media, not approved curriculum.
 
 Browser checks also covered sample form required fields, successful sample submission, subject selection by keyboard, the uploaded-video dialog, the saved-draft teaching view and presentation exit. Teaching layouts at 320 px and 1024 px had no horizontal overflow. Pause stopped at a saved 35% chunk boundary and resumed from that position to completion. Canceling another upload showed an explicit canceled state and added no ready asset. Physical iPad/Android testing, a five-center pilot, production email delivery and the cellular performance target remain unverified external acceptance items.
+
+The hosted 23 MB test upload exposed R2 completion responses that omit custom metadata, unlike the local emulator. Completion now verifies the persisted object using HEAD; a regression test covers this provider behavior. Resuming the saved hosted chunks successfully attached the original cloud object and opened its private video preview. See [Cloudflare provider report](https://github.com/cloudflare/developer-platform/issues/3) for the matching provider behavior.
