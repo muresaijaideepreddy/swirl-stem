@@ -1,4 +1,6 @@
-import {auth,localTestAuth,json,db} from './server';
+import {auth,localTestAuth,json,db,settings} from './server';
+import {emailService} from './email.mjs';
+import {notifyInquiry} from './notify.mjs';
 import {InputError,assertSameOrigin,textField} from './core.mjs';
 import {STATE_COOKIE,clearCookie,safeReturnPath,sha256} from './google-auth.mjs';
 // Read (and bound) request bodies before any early rejection: an unread body on a reused connection breaks the next request.
@@ -30,8 +32,10 @@ export async function authRoute(req:Request):Promise<Response|null>{
   const topics=['General question','Licensing & pricing','Refunds & billing','Curriculum feedback','Privacy & my data','Technical help'];if(!topics.includes(b.topic))throw new InputError('Choose a topic.');if(b.consent!==true)throw new InputError('Please confirm that you are an adult and agree to us storing this message.');
   const ipHash=await sha256((req.headers.get('cf-connecting-ip')??'local')+':'+Math.floor(Date.now()/86400000)),recent=await db().prepare('SELECT count(*) AS n FROM contact_messages WHERE ip_hash=? AND created_at>?').bind(ipHash,Date.now()-3600000).first<any>();
   if(recent?.n>=5)throw new InputError('Please wait an hour before sending another message.',429);
-  await db().prepare('INSERT INTO contact_messages(id,ip_hash,data,created_at) VALUES(?,?,?,?)').bind(crypto.randomUUID(),ipHash,JSON.stringify({kind:'contact',name,email,organization,role:b.topic,notes:message}),Date.now()).run();
-  return json({sent:true,message:'Message received. The SwIRL team will get back to you by email.'});
+  const id=crypto.randomUUID(),data={kind:'contact',name,email,organization,role:b.topic,topic:b.topic,notes:message};
+  await db().prepare('INSERT INTO contact_messages(id,ip_hash,data,created_at) VALUES(?,?,?,?)').bind(id,ipHash,JSON.stringify(data),Date.now()).run();
+  const emails=await notifyInquiry(emailService({db:db(),settings:settings()}),settings(),{id:'contact-'+id,kind:'contact',data});
+  return json({sent:true,emailed:emails.confirmation,message:`Message received. The SwIRL team will reply to ${email}.`+(emails.confirmation==='sent'?' A confirmation email is on its way.':'')});
  }
  return null;
 }

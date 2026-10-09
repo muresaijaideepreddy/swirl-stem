@@ -9,6 +9,8 @@ import {schoolAccess} from '@/lib/school-billing.mjs';
 import {makePdf} from '@/lib/pdf';
 import {SCHOOL_ANNUAL_PRICE} from '@/lib/pricing.mjs';
 import {authRoute} from '@/lib/auth-routes';
+import {emailService} from '@/lib/email.mjs';
+import {notifyInquiry} from '@/lib/notify.mjs';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
  const authResponse=await authRoute(req);if(authResponse)return authResponse;
@@ -82,8 +84,8 @@ export async function POST(req:Request){try{
  if(action==='verify-checkout')return json(await individualService().confirm(u,b.sessionId));
  if(action==='checkout-cancel')return json(await individualService().cancel(u,b.orderId));
  if(action==='request'){
-  const lead=validateLead(b),id=u.userId+':'+validKey(b.key),now=Date.now();const prior=await database.prepare('SELECT data FROM leads WHERE id = ? AND user_id = ?').bind(id,u.userId).first<any>();if(prior){if(prior.data!==JSON.stringify(lead))throw new InputError('This request changed. Reload to save a new request.',409);return json({id,status:'saved',message:'Your prototype request is saved in your account. No email was sent and no license or invoice has been issued.'});}const count=await database.prepare('SELECT count(*) AS count FROM leads WHERE user_id = ? AND created_at > ?').bind(u.userId,now-3600000).first<any>();if(count?.count>=10)throw new InputError('Too many requests. Please try again in an hour.',429);
-  await database.prepare('INSERT INTO leads(id,user_id,data,created_at) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,u.userId,JSON.stringify(lead),now).run();return json({id,status:'saved',message:'Your prototype request is saved in your account. No email was sent and no license or invoice has been issued.'});
+  const lead=validateLead(b),id=u.userId+':'+validKey(b.key),now=Date.now();const prior=await database.prepare('SELECT data FROM leads WHERE id = ? AND user_id = ?').bind(id,u.userId).first<any>();if(prior){if(prior.data!==JSON.stringify(lead))throw new InputError('This request changed. Reload to save a new request.',409);return json({id,status:'saved',message:'Your request is saved. The SwIRL team will email you at '+lead.email+'.'});}const count=await database.prepare('SELECT count(*) AS count FROM leads WHERE user_id = ? AND created_at > ?').bind(u.userId,now-3600000).first<any>();if(count?.count>=10)throw new InputError('Too many requests. Please try again in an hour.',429);
+  await database.prepare('INSERT INTO leads(id,user_id,data,created_at) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,u.userId,JSON.stringify(lead),now).run();const emails=await notifyInquiry(emailService({db:database,settings:settings()}),settings(),{id:'lead-'+id,userId:u.userId,kind:lead.kind,data:lead});return json({id,status:'saved',emailed:emails.confirmation,message:(lead.kind==='pilot'?'Thank you! The SwIRL team will email you at '+lead.email+' to plan your free pilot and a live demo.':'Your request is saved. The SwIRL team will email you at '+lead.email+'.')+(emails.confirmation==='sent'?' A confirmation email is on its way.':'')});
  }
  if(action==='progress'){
   const p=await product(b.id,true);if(!p)throw new InputError('Lesson not found.',404);await requireAccess(u.userId,p.id);if(!Number.isInteger(b.lesson)||b.lesson<0||b.lesson>=p.lessons.length||typeof b.complete!=='boolean')throw new InputError('Invalid lesson progress.');
